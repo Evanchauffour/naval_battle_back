@@ -15,19 +15,47 @@ datasource db {
 }
 
 model User {
-  id         String   @id @default(uuid())
+  id         String       @id @default(uuid())
   name       String
-  email      String   @unique
+  email      String       @unique
   password   String
-  isVerified Boolean  @default(false)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  isVerified Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  GamePlayer GamePlayer[]
 }
 
 model VerificationToken {
   id        String   @id @default(uuid())
   token     String   @unique
   email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Game {
+  id         String       @id @default(uuid())
+  roomId     String
+  status     GameStatus
+  duration   Int
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  GamePlayer GamePlayer[]
+}
+
+enum GameStatus {
+  ORGANIZING_BOATS
+  IN_GAME
+  ENDED
+}
+
+model GamePlayer {
+  id        String   @id @default(uuid())
+  gameId    String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  game      Game     @relation(fields: [gameId], references: [id])
+  isWinner  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
