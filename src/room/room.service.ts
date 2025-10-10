@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Room } from './types';
 import { UsersService } from 'src/users/users.service';
+import { randomInt } from 'crypto';
 
 @Injectable()
 export class RoomService {
@@ -18,6 +19,7 @@ export class RoomService {
     const room: Room = {
       id: crypto.randomUUID(),
       creatorId: creatorId,
+      code: randomInt(1000, 10000),
       players: [
         {
           id: creatorId,
@@ -31,6 +33,24 @@ export class RoomService {
 
     this.rooms.push(room);
     return room;
+  }
+
+  async joinRoomByCode(
+    code: number,
+    userId: string,
+  ): Promise<Room | undefined> {
+    console.log('joinRoomByCode', code);
+    console.log('rooms', this.rooms);
+
+    const room = this.rooms.find((room) => room.code === Number(code));
+
+    if (!room) {
+      throw new Error('Room not found');
+    }
+
+    const joinedRoom = await this.joinRoom(room.id, userId);
+
+    return joinedRoom;
   }
 
   async joinRoom(roomId: string, userId: string): Promise<Room> {

@@ -39,6 +39,19 @@ export class RoomGateway {
     client.emit('room-data', room);
   }
 
+  @SubscribeMessage('join-room-by-code')
+  async joinRoomByCode(
+    @MessageBody() data: { code: number; userId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    console.log('join-room-by-code', data.code);
+    const room = await this.roomService.joinRoomByCode(data.code, data.userId);
+
+    client.join(room?.id || '');
+    client.emit('room-joined', room?.id);
+    this.server.to(room?.id || '').emit('room-data', room);
+  }
+
   @SubscribeMessage('join-room')
   async joinRoom(
     @MessageBody() data: { roomId: string; userId: string },

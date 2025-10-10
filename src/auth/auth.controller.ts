@@ -34,9 +34,9 @@ export class AuthController {
 
     res.cookie('accessToken', access_token, {
       httpOnly: true,
-      secure: true, // obligatoire avec SameSite=None
-      sameSite: 'none', // requis en cross-site (Vercel ⇄ Render)
-      path: '/', // en général on le met à la racine
+      secure: true,
+      sameSite: 'lax',
+      path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     return this.userService.findById(req.user.id);
@@ -66,9 +66,9 @@ export class AuthController {
     );
     res.cookie('accessToken', access_token, {
       httpOnly: true,
-      secure: true, // obligatoire avec SameSite=None
-      sameSite: 'none', // requis en cross-site (Vercel ⇄ Render)
-      path: '/', // en général on le met à la racine
+      secure: true,
+      sameSite: 'lax',
+      path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     return this.userService.findById(user.id);

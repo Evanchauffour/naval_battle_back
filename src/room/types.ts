@@ -7,6 +7,7 @@ export interface Player {
 export interface Room {
   id: string;
   creatorId: string;
+  code: number;
   players: Player[];
   createdAt: Date;
   status: 'lobby' | 'in-game' | 'ended';
