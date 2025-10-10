@@ -48,8 +48,8 @@ export class GameGateway {
     client.emit('game-data', game);
   }
 
-  @SubscribeMessage('set-player-boats')
-  setPlayerBoats(
+  @SubscribeMessage('set-player-ready')
+  setPlayerReady(
     @MessageBody()
     data: {
       gameId: string;
@@ -57,16 +57,7 @@ export class GameGateway {
       boats: ShipPosition[];
     },
   ) {
-    this.gameService.setPlayerBoats(data.gameId, data.playerId, data.boats);
-    this.server
-      .to(data.gameId)
-      .emit('game-data', this.gameService.getGameStateById(data.gameId));
-  }
-
-  @SubscribeMessage('set-player-ready')
-  setPlayerReady(@MessageBody() data: { gameId: string; playerId: string }) {
-    console.log('set-player-ready', data);
-    this.gameService.setPlayerReady(data.gameId, data.playerId);
+    this.gameService.setPlayerReady(data.gameId, data.playerId, data.boats);
     this.server
       .to(data.gameId)
       .emit('game-data', this.gameService.getGameStateById(data.gameId));

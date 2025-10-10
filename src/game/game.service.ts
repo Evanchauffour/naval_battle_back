@@ -37,70 +37,7 @@ export class GameService {
       roomId: roomId,
       players: room.players.map((player) => ({
         userId: player.id,
-        ships: [
-          {
-            id: 0,
-            width: 5,
-            height: 1,
-            img: '/boats/boat5.png',
-            isKilled: false,
-            coordinates: [
-              { left: 1, top: 1 },
-              { left: 2, top: 1 },
-              { left: 3, top: 1 },
-              { left: 4, top: 1 },
-              { left: 5, top: 1 },
-            ],
-          },
-          {
-            id: 1,
-            width: 1,
-            height: 4,
-            img: '/boats/boat4.png',
-            isKilled: false,
-            coordinates: [
-              { left: 1, top: 1 },
-              { left: 1, top: 2 },
-              { left: 1, top: 3 },
-              { left: 1, top: 4 },
-            ],
-          },
-          {
-            id: 2,
-            width: 3,
-            height: 1,
-            img: '/boats/boat3.png',
-            isKilled: false,
-            coordinates: [
-              { left: 1, top: 1 },
-              { left: 2, top: 1 },
-              { left: 3, top: 1 },
-            ],
-          },
-          {
-            id: 3,
-            width: 3,
-            height: 1,
-            img: '/boats/boat3.png',
-            isKilled: false,
-            coordinates: [
-              { left: 1, top: 1 },
-              { left: 2, top: 1 },
-              { left: 3, top: 1 },
-            ],
-          },
-          {
-            id: 4,
-            width: 2,
-            height: 1,
-            img: '/boats/boat2.png',
-            isKilled: false,
-            coordinates: [
-              { left: 1, top: 1 },
-              { left: 2, top: 1 },
-            ],
-          },
-        ],
+        ships: [],
         selectedCells: [],
         isReady: false,
       })),
@@ -121,11 +58,7 @@ export class GameService {
     return game;
   }
 
-  setPlayerBoats(gameId: string, playerId: string, boats: ShipPosition[]) {
-    const game = this.getGameStateById(gameId);
-    if (!game) {
-      throw new Error('Game not found');
-    }
+  setPlayerBoats(game: GameState, playerId: string, boats: ShipPosition[]) {
     const player = game.players.find((player) => player.userId === playerId);
     if (!player) {
       throw new Error('Player not found');
@@ -134,7 +67,7 @@ export class GameService {
     return game;
   }
 
-  setPlayerReady(gameId: string, playerId: string) {
+  setPlayerReady(gameId: string, playerId: string, boats: ShipPosition[]) {
     const game = this.getGameStateById(gameId);
     if (!game) {
       throw new Error('Game not found');
@@ -144,6 +77,9 @@ export class GameService {
       throw new Error('Player not found');
     }
     player.isReady = !player.isReady;
+
+    this.setPlayerBoats(game, playerId, boats);
+
     return game;
   }
 
@@ -153,6 +89,17 @@ export class GameService {
       throw new Error('Game not found');
     }
     game.status = GameStatus.IN_GAME;
+    return game;
+  }
+
+  setCurrentTurn(game: GameState, currentPlayerId: string) {
+    const otherPlayer = game.players.find(
+      (player) => player.userId !== currentPlayerId,
+    );
+    if (!otherPlayer) {
+      throw new Error('Other player not found');
+    }
+    game.currentTurn = otherPlayer.userId;
     return game;
   }
 
@@ -171,6 +118,7 @@ export class GameService {
     }
 
     player.selectedCells.push(cells);
+    this.setCurrentTurn(game, playerId);
     return game;
   }
 }
