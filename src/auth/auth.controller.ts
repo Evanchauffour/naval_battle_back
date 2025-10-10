@@ -11,6 +11,7 @@ import type { Response } from 'express';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './local-auth.guard';
 import { RegisterDto } from './dto/register.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import { CurrentUser } from './current-user.decorator';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import type { User } from 'generated/prisma';
@@ -57,7 +58,7 @@ export class AuthController {
 
   @Post('verify-email')
   async verifyEmail(
-    @Body() dto: { token: string },
+    @Body() dto: VerifyEmailDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     const { access_token, user } = await this.authService.verifyEmail(

@@ -67,6 +67,10 @@ export class AuthService {
   }
 
   async verifyEmail(token: string) {
+    if (!token) {
+      throw new BadRequestException('Le token est requis');
+    }
+
     const verificationToken = await this.prisma.verificationToken.findUnique({
       where: { token },
     });
