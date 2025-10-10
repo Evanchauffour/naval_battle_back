@@ -34,6 +34,7 @@ export class AuthController {
     res.cookie('accessToken', access_token, {
       httpOnly: true,
       secure: true,
+      sameSite: 'none',
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     return this.userService.findById(req.user.id);
@@ -65,6 +66,7 @@ export class AuthController {
       httpOnly: true,
       secure: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'none',
     });
     return this.userService.findById(user.id);
   }
