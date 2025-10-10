@@ -62,6 +62,8 @@ export class AuthService {
     });
     console.log(data);
     console.log('token', token);
+
+    return token;
   }
 
   async verifyEmail(token: string) {
