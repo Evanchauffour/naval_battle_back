@@ -24,6 +24,17 @@ export class AuthController {
     private userService: UsersService,
   ) {}
 
+  private getCookieOptions() {
+    return {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none' as const,
+      maxAge: 86400000,
+      path: '/',
+      domain: process.env.COOKIE_DOMAIN,
+    };
+  }
+
   @UseGuards(LocalAuthGuard)
   @Post('login')
   login(
@@ -32,13 +43,7 @@ export class AuthController {
   ) {
     const { access_token } = this.authService.login(req.user);
 
-    res.cookie('accessToken', access_token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('accessToken', access_token, this.getCookieOptions());
     return this.userService.findById(req.user.id);
   }
 
@@ -64,13 +69,7 @@ export class AuthController {
     const { access_token, user } = await this.authService.verifyEmail(
       dto.token,
     );
-    res.cookie('accessToken', access_token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('accessToken', access_token, this.getCookieOptions());
     return this.userService.findById(user.id);
   }
 
