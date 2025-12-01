@@ -29,11 +29,17 @@ export class RoomGateway {
   }
 
   handleConnection(client: Socket) {
-    this.roomService.setUserSocket(client);
+    const userId = (client.data as { user?: { id: string } })?.user?.id;
+    if (userId) {
+      this.roomService.setUserSocket(userId, client.id);
+    }
   }
 
   handleDisconnect(client: Socket) {
-    this.roomService.removeUserSocket(client);
+    const userId = (client.data as { user?: { id: string } })?.user?.id;
+    if (userId) {
+      this.roomService.removeUserSocket(userId);
+    }
   }
 
   @SubscribeMessage('create-room')
@@ -42,7 +48,8 @@ export class RoomGateway {
     @ConnectedSocket() client: Socket,
   ) {
     const room = await this.roomService.createRoom(user.id, false);
-    client.join(room.id);
+    // Join manually for custom rooms
+    await client.join(room.id);
     client.emit('room-created', room);
     this.server.emit('room-list', this.roomService.getAllRooms());
   }
@@ -65,7 +72,7 @@ export class RoomGateway {
     console.log('join-room-by-code', data.code);
     const room = await this.roomService.joinRoomByCode(data.code, user.id);
 
-    client.join(room?.id || '');
+    await client.join(room?.id || '');
     client.emit('room-joined', room?.id);
     this.server.to(room?.id || '').emit('room-data', room);
   }
@@ -78,7 +85,7 @@ export class RoomGateway {
   ) {
     const room = await this.roomService.joinRoom(data.roomId, user.id);
 
-    client.join(data.roomId);
+    await client.join(data.roomId);
     client.to(room?.id || '').emit('room-data', room);
   }
 
@@ -112,10 +119,12 @@ export class RoomGateway {
   }
 
   @SubscribeMessage('start-matchmaking')
-  startMatchmaking(
-    @WsCurrentUser() user: { id: string },
-    @ConnectedSocket() client: Socket,
-  ) {
-    this.roomService.startMatchmaking(user.id, client);
+  async startMatchmaking(@WsCurrentUser() user: { id: string }) {
+    await this.roomService.startMatchmaking(user.id);
+  }
+
+  @SubscribeMessage('cancel-matchmaking')
+  cancelMatchmaking(@WsCurrentUser() user: { id: string }) {
+    this.roomService.leaveQueue(user.id);
   }
 }

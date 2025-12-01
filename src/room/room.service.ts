@@ -2,13 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { Room } from './types';
 import { UsersService } from 'src/users/users.service';
 import { randomInt } from 'crypto';
-import { Server, Socket } from 'socket.io';
+import { Server } from 'socket.io';
 
 @Injectable()
 export class RoomService {
   private server: Server;
   private rooms: Map<string, Room> = new Map();
-  private userSocket: Map<string, Socket> = new Map();
+  private userSocket: Map<string, string> = new Map();
 
   constructor(private usersService: UsersService) {}
 
@@ -16,13 +16,12 @@ export class RoomService {
     this.server = server;
   }
 
-  setUserSocket(socket: Socket) {
-    this.userSocket.get(socket.id);
-    this.userSocket.set(socket.id, socket);
+  setUserSocket(userId: string, socketId: string) {
+    this.userSocket.set(userId, socketId);
   }
 
-  removeUserSocket(socket: Socket) {
-    this.userSocket.delete(socket.id);
+  removeUserSocket(userId: string) {
+    this.userSocket.delete(userId);
   }
 
   async createRoom(
@@ -63,11 +62,13 @@ export class RoomService {
   }
 
   matchmakingScheduleTimeout(roomId: string) {
+    console.log('matchmakingScheduleTimeout', roomId);
+
     setTimeout(() => {
       void (async () => {
         const room = this.getRoomById(roomId);
         if (!room) {
-          throw new Error('Room not found');
+          return;
         }
 
         if (room.players.length < 2) {
@@ -75,19 +76,12 @@ export class RoomService {
 
           const compatibleRoom = this.findCompatibleRoom(room.elo || 0);
           if (compatibleRoom) {
-            // Get all sockets in the current room and make them join the compatible room
-            const sockets = await this.server.in(room.id).fetchSockets();
-            for (const socket of sockets) {
-               socket.join(compatibleRoom.id);
-            }
-
             await this.joinRoomMatchmaking(
               compatibleRoom.id,
               room.players[0].id,
-              null, // No single client socket to pass here, strictly logic update
             );
           } else {
-            this.createRoom(room.players[0].id, false, room.elo, true);
+            await this.createRoom(room.players[0].id, false, room.elo, true);
           }
         } else {
           return;
@@ -133,7 +127,7 @@ export class RoomService {
     return room;
   }
 
-  async joinRoomMatchmaking(roomId: string, userId: string, client: any) {
+  async joinRoomMatchmaking(roomId: string, userId: string) {
     const user = await this.usersService.findById(userId);
     if (!user) {
       throw new Error('User not found');
@@ -148,25 +142,15 @@ export class RoomService {
       isReady: false,
     });
 
-    // Only call join if client has a join method (it's a socket)
-    if (client && typeof client.join === 'function') {
-      client.join(room.id);
-    }
-    // If it's a BroadcastOperator (server.to(...)), we don't need to join, 
-    // just emitting to the room is enough context for match-found if needed, 
-    // but here we seem to want to subscribe the user to the room updates.
-    // However, when called from matchmakingScheduleTimeout with server.to(), 
-    // we can't "join" the room in the same way.
-    // Since the logic in matchmakingScheduleTimeout implies moving a group or re-notifying,
-    // let's see.
-    
-    // Actually, looking at line 81: this.server.to(room.id) passed as client.
-    // Broadcaster doesn't have join.
-    // When re-matching a waiting room, we might need all sockets in that room to join the new room?
-    // Or if we are just merging rooms...
-
     if (room.players.length === 2) {
       console.log('match found', room);
+      // Add both players to the room
+      room.players.forEach((player) => {
+        const socketId = this.userSocket.get(player.id);
+        if (socketId) {
+          this.server.in(socketId).socketsJoin(room.id);
+        }
+      });
       this.server.to(room.id).emit('match-found', room);
     }
   }
@@ -206,7 +190,23 @@ export class RoomService {
     return this.rooms.get(id);
   }
 
-  async startMatchmaking(userId: string, client: Socket) {
+  leaveQueue(userId: string) {
+    const room = Array.from(this.rooms.values()).find((room) =>
+      room.players.some((player) => player.id === userId),
+    );
+
+    if (!room) {
+      return; // Or throw error if strict validation is needed
+    }
+
+    room.players = room.players.filter((player) => player.id !== userId);
+
+    if (room.players.length === 0) {
+      this.rooms.delete(room.id);
+    }
+  }
+
+  async startMatchmaking(userId: string) {
     const user = await this.usersService.findById(userId);
     if (!user) {
       throw new Error('User not found');
@@ -214,10 +214,9 @@ export class RoomService {
 
     const compatibleRoom = this.findCompatibleRoom(user.elo);
     if (compatibleRoom) {
-      this.joinRoomMatchmaking(compatibleRoom.id, userId, client);
+      await this.joinRoomMatchmaking(compatibleRoom.id, userId);
     } else {
-      const room = await this.createRoom(userId, false, user.elo);
-      client.join(room.id);
+      await this.createRoom(userId, false, user.elo, true);
     }
   }
 
