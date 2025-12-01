@@ -80,6 +80,10 @@ export class GameService {
 
     this.setPlayerBoats(game, playerId, boats);
 
+    if (game.players.every((player) => player.isReady)) {
+      this.startGame(game.gameId);
+    }
+
     return game;
   }
 
@@ -92,14 +96,22 @@ export class GameService {
     return game;
   }
 
-  setCurrentTurn(game: GameState, currentPlayerId: string) {
+  setCurrentTurn(
+    game: GameState,
+    currentPlayerId: string,
+    isPlayAgain: boolean,
+  ) {
     const otherPlayer = game.players.find(
       (player) => player.userId !== currentPlayerId,
     );
     if (!otherPlayer) {
       throw new Error('Other player not found');
     }
-    game.currentTurn = otherPlayer.userId;
+    if (!isPlayAgain) {
+      game.currentTurn = otherPlayer.userId;
+    } else {
+      game.currentTurn = currentPlayerId;
+    }
     return game;
   }
 
@@ -107,6 +119,7 @@ export class GameService {
     gameId: string,
     playerId: string,
     cells: { left: number; top: number },
+    isPlayAgain: boolean,
   ) {
     const game = this.getGameStateById(gameId);
     if (!game) {
@@ -118,7 +131,7 @@ export class GameService {
     }
 
     player.selectedCells.push(cells);
-    this.setCurrentTurn(game, playerId);
+    this.setCurrentTurn(game, playerId, isPlayAgain);
     return game;
   }
 }

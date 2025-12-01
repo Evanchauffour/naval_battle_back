@@ -7,6 +7,7 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { PrismaModule } from 'src/prisma.module';
+import { WsAuthMiddleware } from './ws-auth.middleware';
 
 @Module({
   imports: [
@@ -18,8 +19,8 @@ import { PrismaModule } from 'src/prisma.module';
       signOptions: { expiresIn: '7d' },
     }),
   ],
-  providers: [AuthService, LocalStrategy, JwtStrategy],
+  providers: [AuthService, LocalStrategy, JwtStrategy, WsAuthMiddleware],
   controllers: [AuthController],
-  exports: [AuthService],
+  exports: [AuthService, WsAuthMiddleware, JwtModule],
 })
 export class AuthModule {}

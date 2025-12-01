@@ -4,20 +4,30 @@ import {
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
+  OnGatewayInit,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { GameService } from './game.service';
 import { ShipPosition } from './types';
+import { WsAuthMiddleware } from '../auth/ws-auth.middleware';
+import { WsCurrentUser } from '../auth/ws-current-user.decorator';
 
 @WebSocketGateway({
   cors: {
     origin: '*',
   },
 })
-export class GameGateway {
+export class GameGateway implements OnGatewayInit {
   @WebSocketServer()
   server: Server;
-  constructor(private gameService: GameService) {}
+  constructor(
+    private gameService: GameService,
+    private wsAuthMiddleware: WsAuthMiddleware,
+  ) {}
+
+  afterInit() {
+    this.server.use(this.wsAuthMiddleware.createAuthMiddleware());
+  }
 
   @SubscribeMessage('create-game')
   async createGame(
@@ -53,19 +63,11 @@ export class GameGateway {
     @MessageBody()
     data: {
       gameId: string;
-      playerId: string;
       boats: ShipPosition[];
     },
+    @WsCurrentUser() user: { id: string },
   ) {
-    this.gameService.setPlayerReady(data.gameId, data.playerId, data.boats);
-    this.server
-      .to(data.gameId)
-      .emit('game-data', this.gameService.getGameStateById(data.gameId));
-  }
-
-  @SubscribeMessage('start-game')
-  startGame(@MessageBody() data: { gameId: string }) {
-    this.gameService.startGame(data.gameId);
+    this.gameService.setPlayerReady(data.gameId, user.id, data.boats);
     this.server
       .to(data.gameId)
       .emit('game-data', this.gameService.getGameStateById(data.gameId));
@@ -76,14 +78,16 @@ export class GameGateway {
     @MessageBody()
     data: {
       gameId: string;
-      playerId: string;
       cells: { left: number; top: number };
+      isPlayAgain: boolean;
     },
+    @WsCurrentUser() user: { id: string },
   ) {
     this.gameService.setPlayerSelectedCells(
       data.gameId,
-      data.playerId,
+      user.id,
       data.cells,
+      data.isPlayAgain,
     );
     this.server
       .to(data.gameId)

@@ -10,5 +10,7 @@ export interface Room {
   code: number;
   players: Player[];
   createdAt: Date;
+  elo?: number;
+  isPrivate: boolean;
   status: 'lobby' | 'in-game' | 'ended';
 }

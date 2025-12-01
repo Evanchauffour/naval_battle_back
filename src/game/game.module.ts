@@ -3,9 +3,10 @@ import { GameService } from './game.service';
 import { GameGateway } from './game.gateway';
 import { RoomModule } from 'src/room/room.module';
 import { PrismaModule } from 'src/prisma.module';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
   providers: [GameService, GameGateway],
-  imports: [RoomModule, PrismaModule],
+  imports: [RoomModule, PrismaModule, AuthModule],
 })
 export class GameModule {}

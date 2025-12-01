@@ -7,6 +7,8 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { RoomService } from './room.service';
+import { WsAuthMiddleware } from '../auth/ws-auth.middleware';
+import { WsCurrentUser } from '../auth/ws-current-user.decorator';
 
 @WebSocketGateway({
   cors: {
@@ -16,16 +18,31 @@ import { RoomService } from './room.service';
 export class RoomGateway {
   @WebSocketServer()
   server: Server;
-  constructor(private roomService: RoomService) {}
+  constructor(
+    private roomService: RoomService,
+    private wsAuthMiddleware: WsAuthMiddleware,
+  ) {}
+
+  afterInit() {
+    this.roomService.setServer(this.server);
+    this.server.use(this.wsAuthMiddleware.createAuthMiddleware());
+  }
+
+  handleConnection(client: Socket) {
+    this.roomService.setUserSocket(client);
+  }
+
+  handleDisconnect(client: Socket) {
+    this.roomService.removeUserSocket(client);
+  }
 
   @SubscribeMessage('create-room')
   async createRoom(
-    @MessageBody() data: { userId: string },
+    @WsCurrentUser() user: { id: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const room = await this.roomService.createRoom(data.userId);
-
-    await client.join(room.id);
+    const room = await this.roomService.createRoom(user.id, false);
+    client.join(room.id);
     client.emit('room-created', room);
     this.server.emit('room-list', this.roomService.getAllRooms());
   }
@@ -41,11 +58,12 @@ export class RoomGateway {
 
   @SubscribeMessage('join-room-by-code')
   async joinRoomByCode(
-    @MessageBody() data: { code: number; userId: string },
+    @MessageBody() data: { code: number },
+    @WsCurrentUser() user: { id: string },
     @ConnectedSocket() client: Socket,
   ) {
     console.log('join-room-by-code', data.code);
-    const room = await this.roomService.joinRoomByCode(data.code, data.userId);
+    const room = await this.roomService.joinRoomByCode(data.code, user.id);
 
     client.join(room?.id || '');
     client.emit('room-joined', room?.id);
@@ -54,10 +72,11 @@ export class RoomGateway {
 
   @SubscribeMessage('join-room')
   async joinRoom(
-    @MessageBody() data: { roomId: string; userId: string },
+    @MessageBody() data: { roomId: string },
+    @WsCurrentUser() user: { id: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const room = await this.roomService.joinRoom(data.roomId, data.userId);
+    const room = await this.roomService.joinRoom(data.roomId, user.id);
 
     client.join(data.roomId);
     client.to(room?.id || '').emit('room-data', room);
@@ -65,10 +84,11 @@ export class RoomGateway {
 
   @SubscribeMessage('leave-room')
   leaveRoom(
-    @MessageBody() data: { roomId: string; userId: string },
+    @MessageBody() data: { roomId: string },
+    @WsCurrentUser() user: { id: string },
     @ConnectedSocket() client: Socket,
   ) {
-    this.roomService.leaveRoom(data.roomId, data.userId);
+    this.roomService.leaveRoom(data.roomId, user.id);
     client
       .to(data.roomId)
       .emit('room-data', this.roomService.getRoomById(data.roomId));
@@ -83,16 +103,19 @@ export class RoomGateway {
 
   @SubscribeMessage('set-ready')
   setReady(
-    @MessageBody() data: { roomId: string; userId: string; isReady: boolean },
+    @MessageBody() data: { roomId: string; isReady: boolean },
+    @WsCurrentUser() user: { id: string },
   ) {
-    const room = this.roomService.setReady(data.roomId, data.userId);
+    const room = this.roomService.setReady(data.roomId, user.id);
 
     this.server.to(room?.id || '').emit('room-data', room);
   }
 
-  @SubscribeMessage('clear-room-list')
-  clearRoomList() {
-    this.roomService.clearRoomList();
-    this.server.emit('room-list', this.roomService.getAllRooms());
+  @SubscribeMessage('start-matchmaking')
+  startMatchmaking(
+    @WsCurrentUser() user: { id: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    this.roomService.startMatchmaking(user.id, client);
   }
 }

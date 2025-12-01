@@ -19,6 +19,7 @@ model User {
   name       String
   email      String       @unique
   password   String
+  elo        Int          @default(1000)
   isVerified Boolean      @default(false)
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
