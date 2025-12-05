@@ -5,6 +5,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
+import { Inject, forwardRef } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { RoomService } from './room.service';
 import { WsAuthMiddleware } from '../auth/ws-auth.middleware';
@@ -20,6 +21,7 @@ export class RoomGateway {
   server: Server;
   constructor(
     private roomService: RoomService,
+    @Inject(forwardRef(() => WsAuthMiddleware))
     private wsAuthMiddleware: WsAuthMiddleware,
   ) {}
 

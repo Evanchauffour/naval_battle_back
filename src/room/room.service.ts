@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { Room } from './types';
 import { UsersService } from 'src/users/users.service';
 import { randomInt } from 'crypto';
@@ -10,7 +10,10 @@ export class RoomService {
   private rooms: Map<string, Room> = new Map();
   private userSocket: Map<string, string> = new Map();
 
-  constructor(private usersService: UsersService) {}
+  constructor(
+    @Inject(forwardRef(() => UsersService))
+    private usersService: UsersService,
+  ) {}
 
   setServer(server: Server) {
     this.server = server;

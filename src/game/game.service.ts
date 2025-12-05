@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { GameStatus } from 'generated/prisma';
 import { PrismaService } from 'src/prisma.service';
 import { RoomService } from 'src/room/room.service';
@@ -7,6 +12,7 @@ import { GameState, ShipPosition } from './types';
 @Injectable()
 export class GameService {
   constructor(
+    @Inject(forwardRef(() => RoomService))
     private roomService: RoomService,
     private prisma: PrismaService,
   ) {}
@@ -141,16 +147,13 @@ export class GameService {
       throw new Error('Game not found');
     }
 
-    // Vérifier que le winnerId est bien un joueur de la partie
     const winner = game.players.find((player) => player.userId === winnerId);
     if (!winner) {
       throw new Error('Winner is not a player in this game');
     }
 
-    // Mettre à jour le status du jeu en mémoire
     game.status = GameStatus.ENDED;
 
-    // Mettre à jour la base de données
     await this.prisma.game.update({
       where: { id: gameId },
       data: {
@@ -158,7 +161,6 @@ export class GameService {
       },
     });
 
-    // Mettre à jour les GamePlayer pour marquer le gagnant et le perdant
     const loserId = game.players.find(
       (player) => player.userId !== winnerId,
     )?.userId;
@@ -167,7 +169,6 @@ export class GameService {
       throw new Error('Loser not found');
     }
 
-    // Récupérer l'elo actuel des joueurs
     const winnerUser = await this.prisma.user.findUnique({
       where: { id: winnerId },
       select: { elo: true },
@@ -182,30 +183,24 @@ export class GameService {
       throw new Error('User not found');
     }
 
-    // Constantes pour les changements d'elo
     const WIN_ELO_CHANGE = 20;
     const LOSE_ELO_CHANGE = -15;
 
-    // Calculer les nouveaux elo
     const winnerEloBefore = winnerUser.elo;
     const winnerEloAfter = winnerEloBefore + WIN_ELO_CHANGE;
 
     const loserEloBefore = loserUser.elo;
     const loserEloAfter = Math.max(0, loserEloBefore + LOSE_ELO_CHANGE); // Elo ne peut pas être négatif
 
-    // Mettre à jour les elo des utilisateurs et créer les RatingHistory
     await Promise.all([
-      // Mettre à jour l'elo du gagnant
       this.prisma.user.update({
         where: { id: winnerId },
         data: { elo: winnerEloAfter },
       }),
-      // Mettre à jour l'elo du perdant
       this.prisma.user.update({
         where: { id: loserId },
         data: { elo: loserEloAfter },
       }),
-      // Créer RatingHistory pour le gagnant
       this.prisma.ratingHistory.create({
         data: {
           userId: winnerId,
@@ -214,7 +209,6 @@ export class GameService {
           eloAfter: winnerEloAfter,
         },
       }),
-      // Créer RatingHistory pour le perdant
       this.prisma.ratingHistory.create({
         data: {
           userId: loserId,
@@ -223,7 +217,6 @@ export class GameService {
           eloAfter: loserEloAfter,
         },
       }),
-      // Mettre à jour GamePlayer pour le gagnant
       this.prisma.gamePlayer.updateMany({
         where: {
           gameId,
@@ -234,7 +227,6 @@ export class GameService {
           eloChange: WIN_ELO_CHANGE,
         },
       }),
-      // Mettre à jour GamePlayer pour le perdant
       this.prisma.gamePlayer.updateMany({
         where: {
           gameId,
@@ -289,7 +281,55 @@ export class GameService {
       eloChange: gamePlayer.eloChange || 0,
       currentElo: gamePlayer.user.elo,
       highestElo,
-      streak: 0, // Pas de système de streak pour l'instant
+      streak: 0,
+    };
+  }
+
+  async getUserHistory(userId: string, page: number, limit: number) {
+    const gamePlayers = await this.prisma.gamePlayer.findMany({
+      where: {
+        userId,
+        game: {
+          status: GameStatus.ENDED,
+        },
+      },
+      select: {
+        isWinner: true,
+        eloChange: true,
+        game: {
+          select: {
+            id: true,
+            createdAt: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { game: { createdAt: 'desc' } },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    const total = await this.prisma.gamePlayer.count({
+      where: {
+        userId,
+        game: {
+          status: GameStatus.ENDED,
+        },
+      },
+    });
+
+    return {
+      games: gamePlayers.map((gamePlayer) => ({
+        id: gamePlayer.game.id,
+        createdAt: gamePlayer.game.createdAt,
+        isWinner: gamePlayer.isWinner,
+        eloChange: gamePlayer.eloChange,
+        status: gamePlayer.game.status,
+        // Pour naval battle, on n'a pas de score, donc on met des valeurs par défaut
+        currentPlayerScore: gamePlayer.isWinner ? 1 : 0,
+        opponentScore: gamePlayer.isWinner ? 0 : 1,
+      })),
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 }
