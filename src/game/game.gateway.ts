@@ -93,4 +93,17 @@ export class GameGateway implements OnGatewayInit {
       .to(data.gameId)
       .emit('game-data', this.gameService.getGameStateById(data.gameId));
   }
+
+  @SubscribeMessage('end-game')
+  async endGame(
+    @MessageBody()
+    data: {
+      gameId: string;
+      winnerId: string;
+    },
+  ) {
+    await this.gameService.endGame(data.gameId, data.winnerId);
+    const gameState = this.gameService.getGameStateById(data.gameId);
+    this.server.to(data.gameId).emit('game-data', gameState);
+  }
 }
