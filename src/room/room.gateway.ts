@@ -53,6 +53,8 @@ export class RoomGateway {
     // Join manually for custom rooms
     await client.join(room.id);
     client.emit('room-created', room);
+    // Envoyer aussi les données de la room au créateur
+    client.emit('room-data', room);
     this.server.emit('room-list', this.roomService.getAllRooms());
   }
 
@@ -62,7 +64,12 @@ export class RoomGateway {
     @ConnectedSocket() client: Socket,
   ) {
     const room = this.roomService.getRoomById(data.roomId);
-    client.emit('room-data', room);
+    if (room) {
+      client.emit('room-data', room);
+    } else {
+      // Envoyer null si la room n'existe pas
+      client.emit('room-data', null);
+    }
   }
 
   @SubscribeMessage('join-room-by-code')
@@ -74,9 +81,14 @@ export class RoomGateway {
     console.log('join-room-by-code', data.code);
     const room = await this.roomService.joinRoomByCode(data.code, user.id);
 
-    await client.join(room?.id || '');
-    client.emit('room-joined', room?.id);
-    this.server.to(room?.id || '').emit('room-data', room);
+    if (!room) {
+      return;
+    }
+
+    await client.join(room.id);
+    client.emit('room-joined', room.id);
+    // Envoyer à tous les clients dans la room, y compris le créateur
+    this.server.to(room.id).emit('room-data', room);
   }
 
   @SubscribeMessage('join-room')
@@ -88,7 +100,8 @@ export class RoomGateway {
     const room = await this.roomService.joinRoom(data.roomId, user.id);
 
     await client.join(data.roomId);
-    client.to(room?.id || '').emit('room-data', room);
+    // Envoyer à tous les clients dans la room, y compris le créateur
+    this.server.to(room.id).emit('room-data', room);
   }
 
   @SubscribeMessage('leave-room')

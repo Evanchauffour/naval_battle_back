@@ -7,6 +7,7 @@ import {
 import { GameStatus } from 'generated/prisma';
 import { PrismaService } from 'src/prisma.service';
 import { RoomService } from 'src/room/room.service';
+import { UserStatsService } from 'src/user-stats/user-stats.service';
 import { GameState, ShipPosition } from './types';
 
 @Injectable()
@@ -15,6 +16,7 @@ export class GameService {
     @Inject(forwardRef(() => RoomService))
     private roomService: RoomService,
     private prisma: PrismaService,
+    private userStatsService: UserStatsService,
   ) {}
   private games: GameState[] = [];
 
@@ -169,38 +171,31 @@ export class GameService {
       throw new Error('Loser not found');
     }
 
-    const winnerUser = await this.prisma.user.findUnique({
-      where: { id: winnerId },
-      select: { elo: true },
-    });
-
-    const loserUser = await this.prisma.user.findUnique({
-      where: { id: loserId },
-      select: { elo: true },
-    });
-
-    if (!winnerUser || !loserUser) {
-      throw new Error('User not found');
-    }
+    // Récupérer les stats actuelles
+    const winnerStats = await this.userStatsService.getOrCreateStats(winnerId);
+    const loserStats = await this.userStatsService.getOrCreateStats(loserId);
 
     const WIN_ELO_CHANGE = 20;
     const LOSE_ELO_CHANGE = -15;
 
-    const winnerEloBefore = winnerUser.elo;
+    const winnerEloBefore = winnerStats.elo;
     const winnerEloAfter = winnerEloBefore + WIN_ELO_CHANGE;
 
-    const loserEloBefore = loserUser.elo;
+    const loserEloBefore = loserStats.elo;
     const loserEloAfter = Math.max(0, loserEloBefore + LOSE_ELO_CHANGE); // Elo ne peut pas être négatif
 
+    // Mettre à jour les stats des joueurs
     await Promise.all([
-      this.prisma.user.update({
-        where: { id: winnerId },
-        data: { elo: winnerEloAfter },
-      }),
-      this.prisma.user.update({
-        where: { id: loserId },
-        data: { elo: loserEloAfter },
-      }),
+      this.userStatsService.updateStatsAfterGame(
+        winnerId,
+        true,
+        WIN_ELO_CHANGE,
+      ),
+      this.userStatsService.updateStatsAfterGame(
+        loserId,
+        false,
+        LOSE_ELO_CHANGE,
+      ),
       this.prisma.ratingHistory.create({
         data: {
           userId: winnerId,
@@ -248,18 +243,14 @@ export class GameService {
         gameId,
         userId,
       },
-      include: {
-        user: {
-          select: {
-            elo: true,
-          },
-        },
-      },
     });
 
     if (!gamePlayer) {
       throw new NotFoundException('Game player not found');
     }
+
+    // Récupérer les stats de l'utilisateur
+    const userStats = await this.userStatsService.getStatsByUserId(userId);
 
     // Récupérer le highestElo depuis toutes les RatingHistory de l'utilisateur
     const highestRatingHistory = await this.prisma.ratingHistory.findFirst({
@@ -274,14 +265,14 @@ export class GameService {
       },
     });
 
-    const highestElo = highestRatingHistory?.eloAfter || gamePlayer.user.elo;
+    const highestElo = highestRatingHistory?.eloAfter || userStats.elo;
 
     return {
       isWinner: gamePlayer.isWinner,
       eloChange: gamePlayer.eloChange || 0,
-      currentElo: gamePlayer.user.elo,
+      currentElo: userStats.elo,
       highestElo,
-      streak: 0,
+      streak: userStats.streak,
     };
   }
 

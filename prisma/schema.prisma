@@ -16,15 +16,30 @@ datasource db {
 
 model User {
   id            String          @id @default(uuid())
-  name          String
+  firstName     String?
+  lastName      String?
+  username      String          @unique
   email         String          @unique
   password      String
-  elo           Int             @default(1000)
   isVerified    Boolean         @default(false)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   GamePlayer    GamePlayer[]
   RatingHistory RatingHistory[]
+  userStat      UserStat?
+}
+
+model UserStat {
+  userId        String   @id
+  elo           Int      @default(1000)
+  streak        Int      @default(0)
+  highestStreak Int      @default(0)
+  gamesPlayed   Int      @default(0)
+  wins          Int      @default(0)
+  losses        Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model VerificationToken {

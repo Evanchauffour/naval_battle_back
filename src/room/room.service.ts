@@ -3,6 +3,7 @@ import { Room } from './types';
 import { UsersService } from 'src/users/users.service';
 import { randomInt } from 'crypto';
 import { Server } from 'socket.io';
+import { UserStatsService } from 'src/user-stats/user-stats.service';
 
 @Injectable()
 export class RoomService {
@@ -13,6 +14,7 @@ export class RoomService {
   constructor(
     @Inject(forwardRef(() => UsersService))
     private usersService: UsersService,
+    private userStatsService: UserStatsService,
   ) {}
 
   setServer(server: Server) {
@@ -48,7 +50,7 @@ export class RoomService {
       players: [
         {
           id: creatorId,
-          name: user.name,
+          name: user.username,
           isReady: false,
         },
       ],
@@ -124,7 +126,7 @@ export class RoomService {
     }
     room.players.push({
       id: userId,
-      name: user.name,
+      name: user.username,
       isReady: false,
     });
     return room;
@@ -141,12 +143,11 @@ export class RoomService {
     }
     room.players.push({
       id: userId,
-      name: user.name,
+      name: user.username,
       isReady: false,
     });
 
     if (room.players.length === 2) {
-      console.log('match found', room);
       // Add both players to the room
       room.players.forEach((player) => {
         const socketId = this.userSocket.get(player.id);
@@ -210,16 +211,17 @@ export class RoomService {
   }
 
   async startMatchmaking(userId: string) {
-    const user = await this.usersService.findById(userId);
-    if (!user) {
-      throw new Error('User not found');
+    const userStats = await this.userStatsService.getStatsByUserId(userId);
+    if (!userStats) {
+      throw new Error('User stats not found');
     }
 
-    const compatibleRoom = this.findCompatibleRoom(user.elo);
+    const elo = userStats.elo || 1000;
+    const compatibleRoom = this.findCompatibleRoom(elo);
     if (compatibleRoom) {
       await this.joinRoomMatchmaking(compatibleRoom.id, userId);
     } else {
-      await this.createRoom(userId, false, user.elo, true);
+      await this.createRoom(userId, false, elo, true);
     }
   }
 

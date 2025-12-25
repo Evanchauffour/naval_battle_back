@@ -5,6 +5,7 @@ import { GameController } from './game.controller';
 import { RoomModule } from 'src/room/room.module';
 import { PrismaModule } from 'src/prisma.module';
 import { AuthModule } from 'src/auth/auth.module';
+import { UserStatsModule } from 'src/user-stats/user-stats.module';
 
 @Module({
   controllers: [GameController],
@@ -13,6 +14,7 @@ import { AuthModule } from 'src/auth/auth.module';
     forwardRef(() => RoomModule),
     PrismaModule,
     forwardRef(() => AuthModule),
+    UserStatsModule,
   ],
   exports: [GameService],
 })

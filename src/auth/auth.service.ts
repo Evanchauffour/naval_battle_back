@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Inject, forwardRef } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Inject,
+  forwardRef,
+} from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import { RegisterDto } from './dto/register.dto';
@@ -25,11 +30,21 @@ export class AuthService {
     if (isExisting) {
       throw new BadRequestException('Cet email est déjà utilisé');
     }
+
+    const isUsernameTaken = await this.usersService.findByUsername(
+      dto.username,
+    );
+    if (isUsernameTaken) {
+      throw new BadRequestException("Ce nom d'utilisateur est déjà utilisé");
+    }
+
     const hash = await bcrypt.hash(dto.password, 10);
 
     const user = await this.usersService.create({
       email: dto.email,
-      name: dto.name,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      username: dto.username,
       password: hash,
     });
 
