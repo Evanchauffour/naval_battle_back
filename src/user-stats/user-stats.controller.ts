@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { UserStatsService } from './user-stats.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { CurrentUser } from 'src/auth/current-user.decorator';
@@ -24,5 +24,11 @@ export class UserStatsController {
       page || 1,
       limit || 10,
     );
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get(':username')
+  async getStatsByUsername(@Param('username') username: string) {
+    return await this.userStatsService.getStatsByUsername(username);
   }
 }

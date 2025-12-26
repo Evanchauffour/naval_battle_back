@@ -5,6 +5,21 @@ import { PrismaService } from '../prisma.service';
 export class UserStatsService {
   constructor(private prisma: PrismaService) {}
 
+  async getStatsByUsername(username: string) {
+    // First find the user by username
+    const user = await this.prisma.user.findUnique({
+      where: { username },
+      select: { id: true },
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    // Then get stats by userId
+    return await this.getStatsByUserId(user.id);
+  }
+
   async getStatsByUserId(userId: string) {
     const userStat = await this.prisma.userStat.findUnique({
       where: { userId },

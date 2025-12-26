@@ -8,7 +8,7 @@ import { GameStatus } from 'generated/prisma';
 import { PrismaService } from 'src/prisma.service';
 import { RoomService } from 'src/room/room.service';
 import { UserStatsService } from 'src/user-stats/user-stats.service';
-import { GameState, ShipPosition } from './types';
+import { GameState, ShipPosition, Message } from './types';
 
 @Injectable()
 export class GameService {
@@ -19,6 +19,8 @@ export class GameService {
     private userStatsService: UserStatsService,
   ) {}
   private games: GameState[] = [];
+  private playerGames: Map<string, Set<string>> = new Map(); // userId -> Set<gameId>
+  private gameMessages: Map<string, Message[]> = new Map(); // gameId -> Message[]
 
   async createGame(roomId: string) {
     const room = this.roomService.getRoomById(roomId);
@@ -51,9 +53,19 @@ export class GameService {
       })),
       currentTurn: room.players[0].id,
       status: game.status,
+      messages: [],
     };
 
     this.games.push(gameState);
+    this.gameMessages.set(game.id, []);
+
+    // Enregistrer les joueurs dans le jeu
+    room.players.forEach((player) => {
+      if (!this.playerGames.has(player.id)) {
+        this.playerGames.set(player.id, new Set());
+      }
+      this.playerGames.get(player.id)!.add(game.id);
+    });
 
     return gameState;
   }
@@ -274,6 +286,183 @@ export class GameService {
       highestElo,
       streak: userStats.streak,
     };
+  }
+
+  async leaveGame(leavingUserId: string): Promise<GameState | null> {
+    const gameId = Array.from(this.playerGames.get(leavingUserId) || []).at(0);
+    if (!gameId) {
+      return null;
+    }
+
+    let game: GameState | null = null;
+    try {
+      game = this.getGameStateById(gameId);
+    } catch (error) {
+      // Le jeu n'existe plus
+      return null;
+    }
+    
+    if (!game) {
+      return null;
+    }
+
+    // Si le jeu est déjà terminé, ne rien faire
+    if (game.status === GameStatus.ENDED) {
+      return game;
+    }
+
+    // Retirer le joueur du jeu
+    this.removePlayerFromGame(gameId, leavingUserId);
+
+    // Si le jeu est en ORGANIZING_BOATS, on peut simplement le supprimer
+    if (game.status === GameStatus.ORGANIZING_BOATS) {
+      this.games = this.games.filter((g) => g.gameId !== gameId);
+      this.gameMessages.delete(gameId);
+      return null;
+    }
+
+    // Si le jeu est en cours (IN_GAME), c'est un forfait
+    if (game.status === GameStatus.IN_GAME) {
+      const winnerId = game.players.find(
+        (player) => player.userId !== leavingUserId,
+      )?.userId;
+
+      if (!winnerId) {
+        throw new Error('Winner not found');
+      }
+
+      // Marquer le joueur qui part
+      game.leavingUserId = leavingUserId;
+      game.status = GameStatus.ENDED;
+
+      // Mettre à jour la base de données
+      await this.prisma.game.update({
+        where: { id: gameId },
+        data: {
+          status: GameStatus.ENDED,
+        },
+      });
+
+      // Mettre à jour les stats (forfait = perte pour celui qui part)
+      const winnerStats = await this.userStatsService.getOrCreateStats(winnerId);
+      const loserStats = await this.userStatsService.getOrCreateStats(leavingUserId);
+
+      const WIN_ELO_CHANGE = 20;
+      const LOSE_ELO_CHANGE = -15;
+
+      const winnerEloBefore = winnerStats.elo;
+      const winnerEloAfter = winnerEloBefore + WIN_ELO_CHANGE;
+      const loserEloBefore = loserStats.elo;
+      const loserEloAfter = Math.max(0, loserEloBefore + LOSE_ELO_CHANGE);
+
+      await Promise.all([
+        this.userStatsService.updateStatsAfterGame(
+          winnerId,
+          true,
+          WIN_ELO_CHANGE,
+        ),
+        this.userStatsService.updateStatsAfterGame(
+          leavingUserId,
+          false,
+          LOSE_ELO_CHANGE,
+        ),
+        this.prisma.ratingHistory.create({
+          data: {
+            userId: winnerId,
+            gameId,
+            eloBefore: winnerEloBefore,
+            eloAfter: winnerEloAfter,
+          },
+        }),
+        this.prisma.ratingHistory.create({
+          data: {
+            userId: leavingUserId,
+            gameId,
+            eloBefore: loserEloBefore,
+            eloAfter: loserEloAfter,
+          },
+        }),
+        this.prisma.gamePlayer.updateMany({
+          where: {
+            gameId,
+            userId: winnerId,
+          },
+          data: {
+            isWinner: true,
+            eloChange: WIN_ELO_CHANGE,
+          },
+        }),
+        this.prisma.gamePlayer.updateMany({
+          where: {
+            gameId,
+            userId: leavingUserId,
+          },
+          data: {
+            isWinner: false,
+            eloChange: LOSE_ELO_CHANGE,
+          },
+        }),
+      ]);
+    }
+
+    return game;
+  }
+
+  removePlayerFromGame(gameId: string, userId: string) {
+    const games = this.playerGames.get(userId);
+    if (games) {
+      games.delete(gameId);
+      if (games.size === 0) {
+        this.playerGames.delete(userId);
+      }
+    }
+  }
+
+  getPlayerGames(userId: string): Set<string> {
+    return this.playerGames.get(userId) || new Set();
+  }
+
+  async getInProgressGame(userId: string) {
+    const gameIds = Array.from(this.playerGames.get(userId) || []);
+    for (const gameId of gameIds) {
+      const game = this.games.find((g) => g.gameId === gameId);
+      // Retourner seulement si la game est en cours (IN_GAME) et pas terminée (ENDED)
+      if (game && game.status === GameStatus.IN_GAME) {
+        return { gameId: game.gameId, status: game.status };
+      }
+    }
+    return { gameId: null, status: null };
+  }
+
+  async addMessage(
+    gameId: string,
+    message: string,
+    userId: string,
+    username: string,
+  ): Promise<Message> {
+    const game = this.getGameStateById(gameId);
+    if (!game) {
+      throw new Error('Game not found');
+    }
+
+    const messageData: Message = {
+      userId,
+      username,
+      message,
+      timestamp: new Date(),
+    };
+
+    if (!game.messages) {
+      game.messages = [];
+    }
+    game.messages.push(messageData);
+
+    // Garder seulement les 100 derniers messages
+    if (game.messages.length > 100) {
+      game.messages = game.messages.slice(-100);
+    }
+
+    return messageData;
   }
 
   async getUserHistory(userId: string, page: number, limit: number) {

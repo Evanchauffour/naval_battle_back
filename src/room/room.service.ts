@@ -77,19 +77,25 @@ export class RoomService {
         }
 
         if (room.players.length < 2) {
-          this.rooms.delete(roomId);
+          // Si la room a encore un joueur, essayer de le matcher avec une autre room
+          if (room.players.length === 1) {
+            const playerId = room.players[0].id;
+            this.rooms.delete(roomId);
 
-          const compatibleRoom = this.findCompatibleRoom(room.elo || 0);
-          if (compatibleRoom) {
-            await this.joinRoomMatchmaking(
-              compatibleRoom.id,
-              room.players[0].id,
+            const compatibleRoom = this.findCompatibleRoom(
+              room.elo || 0,
+              playerId,
             );
+            if (compatibleRoom) {
+              await this.joinRoomMatchmaking(compatibleRoom.id, playerId);
+            } else {
+              // Recréer une room pour ce joueur
+              await this.createRoom(playerId, false, room.elo, true);
+            }
           } else {
-            await this.createRoom(room.players[0].id, false, room.elo, true);
+            // Room vide, la supprimer
+            this.rooms.delete(roomId);
           }
-        } else {
-          return;
         }
       })();
     }, 10000);
@@ -141,6 +147,17 @@ export class RoomService {
     if (!room) {
       throw new Error('Room not found');
     }
+
+    // Vérifier que le joueur n'est pas déjà dans la room
+    if (room.players.some((player) => player.id === userId)) {
+      throw new Error('User is already in this room');
+    }
+
+    // Vérifier que la room n'est pas pleine
+    if (room.players.length >= 2) {
+      throw new Error('Room is full');
+    }
+
     room.players.push({
       id: userId,
       name: user.username,
@@ -164,12 +181,14 @@ export class RoomService {
     if (!room) {
       throw new Error('Room not found');
     }
-    room.players = room.players.filter((player) => player.id !== userId);
 
-    if (room.players.length === 0) {
-      this.rooms.delete(roomId);
-    }
-    return room;
+    const leavingPlayer = room.players.find((player) => player.id === userId);
+
+    // Supprimer complètement la room dès qu'un joueur quitte
+    // Ne pas essayer de matcher le joueur restant
+    this.rooms.delete(roomId);
+
+    return { room: null, leavingPlayerName: leavingPlayer?.name };
   }
 
   setReady(roomId: string, userId: string) {
@@ -211,13 +230,17 @@ export class RoomService {
   }
 
   async startMatchmaking(userId: string) {
+    // Nettoyer les rooms vides avant de chercher
+    this.cleanupEmptyRooms();
+
     const userStats = await this.userStatsService.getStatsByUserId(userId);
     if (!userStats) {
       throw new Error('User stats not found');
     }
 
     const elo = userStats.elo || 1000;
-    const compatibleRoom = this.findCompatibleRoom(elo);
+    // Exclure les rooms où le joueur est déjà présent
+    const compatibleRoom = this.findCompatibleRoom(elo, userId);
     if (compatibleRoom) {
       await this.joinRoomMatchmaking(compatibleRoom.id, userId);
     } else {
@@ -225,13 +248,29 @@ export class RoomService {
     }
   }
 
-  findCompatibleRoom(elo: number) {
+  cleanupEmptyRooms() {
+    // Supprimer toutes les rooms vides
+    const emptyRooms: string[] = [];
+    this.rooms.forEach((room, roomId) => {
+      if (room.players.length === 0) {
+        emptyRooms.push(roomId);
+      }
+    });
+    emptyRooms.forEach((roomId) => {
+      this.rooms.delete(roomId);
+    });
+  }
+
+  findCompatibleRoom(elo: number, excludeUserId?: string) {
     const room = Array.from(this.rooms.values()).find(
       (room) =>
         !room.isPrivate &&
-        room.players.length < 2 &&
+        room.players.length > 0 && // La room doit avoir au moins un joueur
+        room.players.length < 2 && // Et moins de 2 joueurs
         room.elo &&
-        Math.abs(room.elo - elo) <= 100,
+        Math.abs(room.elo - elo) <= 100 &&
+        // Ne pas retourner une room où le joueur est déjà présent
+        (!excludeUserId || !room.players.some((p) => p.id === excludeUserId)),
     );
     if (!room) {
       return undefined;

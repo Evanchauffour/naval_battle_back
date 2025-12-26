@@ -105,15 +105,32 @@ export class RoomGateway {
   }
 
   @SubscribeMessage('leave-room')
-  leaveRoom(
+  async leaveRoom(
     @MessageBody() data: { roomId: string },
     @WsCurrentUser() user: { id: string },
     @ConnectedSocket() client: Socket,
   ) {
-    this.roomService.leaveRoom(data.roomId, user.id);
-    client
-      .to(data.roomId)
-      .emit('room-data', this.roomService.getRoomById(data.roomId));
+    const result = this.roomService.leaveRoom(data.roomId, user.id);
+
+    // Envoyer un message uniquement aux autres clients dans la room (pas à celui qui part)
+    if (result.leavingPlayerName) {
+      client.to(data.roomId).emit('player-left-room', {
+        roomId: data.roomId,
+        leavingPlayerName: result.leavingPlayerName,
+        message: `${result.leavingPlayerName} a quitté la partie`,
+      });
+    }
+
+    // La room est toujours supprimée, donc informer tous les autres clients qu'elle est fermée
+    client.to(data.roomId).emit('room-closed', { roomId: data.roomId });
+
+    // Faire quitter tous les clients de la room (y compris celui qui part)
+    const sockets = await this.server.in(data.roomId).fetchSockets();
+    sockets.forEach((socket) => {
+      socket.leave(data.roomId);
+    });
+
+    // Mettre à jour la liste des rooms (la room a été supprimée)
     this.server.emit('room-list', this.roomService.getAllRooms());
   }
 

@@ -24,4 +24,9 @@ export class GameController {
   ) {
     return this.gameService.getUserHistory(user.id, page || 1, limit || 10);
   }
+
+  @Get('get-inprogress-game')
+  getInProgressGame(@CurrentUser() user: { id: string }) {
+    return this.gameService.getInProgressGame(user.id);
+  }
 }
