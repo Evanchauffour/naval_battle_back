@@ -1,9 +1,10 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Query, UseGuards } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { CurrentUser } from 'src/auth/current-user.decorator';
 import type { User } from 'generated/prisma';
 import { GameService } from 'src/game/game.service';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 @Controller('users')
 export class UsersController {
@@ -16,6 +17,12 @@ export class UsersController {
   @Get('profile')
   getProfile(@CurrentUser() user: User) {
     return this.userService.findById(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('profile')
+  updateProfile(@CurrentUser() user: User, @Body() dto: UpdateProfileDto) {
+    return this.userService.updateProfile(user.id, dto);
   }
 
   @UseGuards(JwtAuthGuard)
