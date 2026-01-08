@@ -297,11 +297,10 @@ export class GameService {
     let game: GameState | null = null;
     try {
       game = this.getGameStateById(gameId);
-    } catch (error) {
-      // Le jeu n'existe plus
+    } catch {
       return null;
     }
-    
+
     if (!game) {
       return null;
     }
@@ -344,8 +343,10 @@ export class GameService {
       });
 
       // Mettre à jour les stats (forfait = perte pour celui qui part)
-      const winnerStats = await this.userStatsService.getOrCreateStats(winnerId);
-      const loserStats = await this.userStatsService.getOrCreateStats(leavingUserId);
+      const winnerStats =
+        await this.userStatsService.getOrCreateStats(winnerId);
+      const loserStats =
+        await this.userStatsService.getOrCreateStats(leavingUserId);
 
       const WIN_ELO_CHANGE = 20;
       const LOSE_ELO_CHANGE = -15;
@@ -422,7 +423,7 @@ export class GameService {
     return this.playerGames.get(userId) || new Set();
   }
 
-  async getInProgressGame(userId: string) {
+  getInProgressGame(userId: string) {
     const gameIds = Array.from(this.playerGames.get(userId) || []);
     for (const gameId of gameIds) {
       const game = this.games.find((g) => g.gameId === gameId);
@@ -434,12 +435,12 @@ export class GameService {
     return { gameId: null, status: null };
   }
 
-  async addMessage(
+  addMessage(
     gameId: string,
     message: string,
     userId: string,
     username: string,
-  ): Promise<Message> {
+  ): Message {
     const game = this.getGameStateById(gameId);
     if (!game) {
       throw new Error('Game not found');
@@ -481,6 +482,16 @@ export class GameService {
             id: true,
             createdAt: true,
             status: true,
+            GamePlayer: {
+              select: {
+                userId: true,
+                user: {
+                  select: {
+                    username: true,
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -499,16 +510,25 @@ export class GameService {
     });
 
     return {
-      games: gamePlayers.map((gamePlayer) => ({
-        id: gamePlayer.game.id,
-        createdAt: gamePlayer.game.createdAt,
-        isWinner: gamePlayer.isWinner,
-        eloChange: gamePlayer.eloChange,
-        status: gamePlayer.game.status,
-        // Pour naval battle, on n'a pas de score, donc on met des valeurs par défaut
-        currentPlayerScore: gamePlayer.isWinner ? 1 : 0,
-        opponentScore: gamePlayer.isWinner ? 0 : 1,
-      })),
+      games: gamePlayers.map((gamePlayer) => {
+        const opponent = gamePlayer.game.GamePlayer.find(
+          (player) => player.userId !== userId,
+        );
+        console.log(opponent);
+        return {
+          id: gamePlayer.game.id,
+          createdAt: gamePlayer.game.createdAt,
+          isWinner: gamePlayer.isWinner,
+          eloChange: gamePlayer.eloChange,
+          status: gamePlayer.game.status,
+          opponent: {
+            username: opponent?.user.username,
+            userId: opponent?.userId,
+          },
+          currentPlayerScore: gamePlayer.isWinner ? 1 : 0,
+          opponentScore: gamePlayer.isWinner ? 0 : 1,
+        };
+      }),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }

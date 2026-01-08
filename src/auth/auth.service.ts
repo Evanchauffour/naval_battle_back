@@ -67,8 +67,7 @@ export class AuthService {
         token,
       },
     });
-    console.log(process.env.RESEND_FROM_EMAIL);
-    const data = await this.resend.emails.send({
+    await this.resend.emails.send({
       from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
       to: email,
       subject: 'Vérification de votre email',
@@ -77,8 +76,6 @@ export class AuthService {
         <a href="${process.env.FRONTEND_URL}/verify-email?token=${token}">Vérifier mon email</a>
       `,
     });
-    console.log(data);
-    console.log('token', token);
 
     return token;
   }
