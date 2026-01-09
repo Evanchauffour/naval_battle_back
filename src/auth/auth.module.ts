@@ -8,10 +8,12 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { PrismaModule } from 'src/prisma.module';
 import { WsAuthMiddleware } from './ws-auth.middleware';
+import { MailModule } from 'src/mail/mail.module';
 
 @Module({
   imports: [
     PrismaModule,
+    MailModule,
     forwardRef(() => UsersModule),
     PassportModule,
     JwtModule.register({

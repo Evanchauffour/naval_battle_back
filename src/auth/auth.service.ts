@@ -9,21 +9,18 @@ import { JwtService } from '@nestjs/jwt';
 import { RegisterDto } from './dto/register.dto';
 import * as bcrypt from 'bcrypt';
 import { User } from 'generated/prisma';
-import { Resend } from 'resend';
 import { PrismaService } from 'src/prisma.service';
+import { MailService } from 'src/mail/mail.service';
 
 @Injectable()
 export class AuthService {
-  private readonly resend: Resend;
-
   constructor(
     @Inject(forwardRef(() => UsersService))
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
-  ) {
-    this.resend = new Resend(process.env.RESEND_API_KEY);
-  }
+    private readonly mailService: MailService,
+  ) {}
 
   async register(dto: RegisterDto) {
     const isExisting = await this.usersService.findByEmail(dto.email);
@@ -67,15 +64,9 @@ export class AuthService {
         token,
       },
     });
-    await this.resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
-      to: email,
-      subject: 'Vérification de votre email',
-      html: `
-        <p>Veuillez cliquer sur le lien suivant pour vérifier votre email:</p>
-        <a href="${process.env.FRONTEND_URL}/verify-email?token=${token}">Vérifier mon email</a>
-      `,
-    });
+
+    // Envoi de l'email avec le template MJML
+    await this.mailService.sendVerificationEmail(email, token);
 
     return token;
   }
@@ -100,6 +91,14 @@ export class AuthService {
     await this.prisma.verificationToken.delete({
       where: { token },
     });
+
+    // Envoi de l'email de bienvenue
+    try {
+      await this.mailService.sendWelcomeEmail(user.email, user.username);
+    } catch (error) {
+      console.error("Erreur lors de l'envoi de l'email de bienvenue:", error);
+      // On ne bloque pas le processus si l'email de bienvenue échoue
+    }
 
     return { access_token: this.login(user).access_token, user };
   }
