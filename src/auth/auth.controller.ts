@@ -50,7 +50,13 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Post('logout')
   logout(@Res({ passthrough: true }) res: Response) {
-    res.clearCookie('accessToken');
+    res.clearCookie('accessToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none' as const,
+      path: '/',
+      domain: process.env.COOKIE_DOMAIN,
+    });
     return { message: 'Déconnecté avec succès' };
   }
 
