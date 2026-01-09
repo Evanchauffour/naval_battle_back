@@ -20,10 +20,7 @@ export class UserStatsController {
     @Query('page') page: number,
     @Query('limit') limit: number,
   ) {
-    return await this.userStatsService.getLeaderboard(
-      page || 1,
-      limit || 10,
-    );
+    return await this.userStatsService.getLeaderboard(page || 1, limit || 10);
   }
 
   @UseGuards(JwtAuthGuard)

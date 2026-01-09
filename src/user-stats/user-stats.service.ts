@@ -183,4 +183,18 @@ export class UserStatsService {
       },
     };
   }
+
+  async createUserStats(userId: string) {
+    return await this.prisma.userStat.create({
+      data: {
+        userId,
+        elo: 1000,
+        streak: 0,
+        highestStreak: 0,
+        gamesPlayed: 0,
+        wins: 0,
+        losses: 0,
+      },
+    });
+  }
 }

@@ -9,6 +9,7 @@ import { AuthController } from './auth.controller';
 import { PrismaModule } from 'src/prisma.module';
 import { WsAuthMiddleware } from './ws-auth.middleware';
 import { MailModule } from 'src/mail/mail.module';
+import { UserStatsModule } from 'src/user-stats/user-stats.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { MailModule } from 'src/mail/mail.module';
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '7d' },
     }),
+    forwardRef(() => UserStatsModule),
   ],
   providers: [AuthService, LocalStrategy, JwtStrategy, WsAuthMiddleware],
   controllers: [AuthController],

@@ -11,6 +11,7 @@ import * as bcrypt from 'bcrypt';
 import { User } from 'generated/prisma';
 import { PrismaService } from 'src/prisma.service';
 import { MailService } from 'src/mail/mail.service';
+import { UserStatsService } from 'src/user-stats/user-stats.service';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +21,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
     private readonly mailService: MailService,
+    private readonly userStatsService: UserStatsService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -44,6 +46,8 @@ export class AuthService {
       username: dto.username,
       password: hash,
     });
+
+    await this.userStatsService.createUserStats(user.id);
 
     try {
       await this.sendVerificationEmail(dto.email);
